@@ -65,7 +65,7 @@
   '';
 
   environment.shellAliases = {
-    r = "lf"; # like ranger 
+    r = "lf"; 
     v = "nvim";
   };
 
@@ -84,22 +84,12 @@
   networking = {
     hostName = "test";
     useNetworkd = true;
-    useDHCP = false;
+    useDHCP = true;
     firewall.enable = false;
   };
 
 
-
-  systemd.network.networks = {
-    dhcp = {
-      # Ampere A1[aarch64]   # E2.1.Micro[x86_64]
-      name = if pkgs.hostPlatform.isAarch64 then "enp0s3" else "ens3";
-      DHCP = "yes";
-    };
-  };
-
   system.activationScripts."diff-closures".text = ''
     [[ -e "/run/current-system" ]] && ${pkgs.nix}/bin/nix store  diff-closures /run/current-system "$systemConfig"
   '';
-
 }
