@@ -27,7 +27,6 @@ in
   imports = [
     ./fileSystem.nix
     ./strip.nix
-    ./kernelModule.nix
   ];
 
   system.stateVersion = lib.trivial.release;
