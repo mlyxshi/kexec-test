@@ -11,9 +11,9 @@ let
     #!/usr/bin/env bash
     set -e   
 
-    echo "Downloading kexec-musl-bin" && curl -LO https://github.com/mlyxshi/kexec/releases/download/latest/${kexec-musl-bin} && chmod +x ./${kexec-musl-bin}
-    echo "Downloading initrd" && curl -LO https://github.com/mlyxshi/kexec/releases/download/latest/${initrdName}
-    echo "Downloading kernel" && curl -LO https://github.com/mlyxshi/kexec/releases/download/latest/${kernelName}
+    echo "Downloading kexec-musl-bin" && curl -LO https://github.com/mlyxshi/kexec-test/releases/download/latest/${kexec-musl-bin} && chmod +x ./${kexec-musl-bin}
+    echo "Downloading initrd" && curl -LO https://github.com/mlyxshi/kexec-test/releases/download/latest/${initrdName}
+    echo "Downloading kernel" && curl -LO https://github.com/mlyxshi/kexec-test/releases/download/latest/${kernelName}
  
     # INITRD_TMP=$(mktemp -d --tmpdir=.)
     # cd "$INITRD_TMP" 
