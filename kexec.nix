@@ -35,7 +35,7 @@ in
   nix.settings.experimental-features = [ "nix-command" "flakes" ];
 
   boot.kernelPackages = pkgs.linuxPackages_latest;
-  boot.initrd.systemd.enable = true;
+  # boot.initrd.systemd.enable = true;
 
   networking.useNetworkd = true;
   systemd.network.wait-online.anyInterface = true;
