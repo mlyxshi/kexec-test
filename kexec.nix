@@ -1,41 +1,19 @@
-{ pkgs, lib, config, modulesPath, ... }:
-let
-  kernelTarget = pkgs.hostPlatform.linux-kernel.target;
-  arch = pkgs.hostPlatform.uname.processor;
-  kernelName = "${kernelTarget}-${arch}";
-  initrdName = "initrd-${arch}.zst";
-  kexecScriptName = "kexec-${arch}";
-  kexec-musl-bin = "kexec-musl-${arch}";
-
-  kexecScript = pkgs.writeScript "kexec-boot" ''
-    #!/usr/bin/env bash
-    set -e   
-
-    echo "Downloading kexec-musl-bin" && curl -LO https://github.com/mlyxshi/kexec-test/releases/download/latest/${kexec-musl-bin} && chmod +x ./${kexec-musl-bin}
-    echo "Downloading initrd" && curl -LO https://github.com/mlyxshi/kexec-test/releases/download/latest/${initrdName}
-    echo "Downloading kernel" && curl -LO https://github.com/mlyxshi/kexec-test/releases/download/latest/${kernelName}
- 
-    echo "--------------------------------------------------"
-    echo "Wait..."
-    echo "After SSH connection lost, ssh root@ip and enjoy NixOS!"
-    ./${kexec-musl-bin} --kexec-syscall-auto --load ./${kernelName} --initrd=./${initrdName}  --command-line "init=${config.system.build.toplevel}/init ${toString config.boot.kernelParams}"
-    ./${kexec-musl-bin} -e
-  '';
-in
-{
+{ pkgs, lib, config, modulesPath, ... }:{
 
   imports = [
     ./fileSystem.nix
     ./strip.nix
   ];
 
+  # boot.initrd.systemd.enable = true;
+
+
   system.stateVersion = lib.trivial.release;
 
   nix.settings.experimental-features = [ "nix-command" "flakes" ];
 
   boot.kernelPackages = pkgs.linuxPackages_latest;
-  boot.initrd.systemd.enable = true;
-
+  
   boot.initrd.availableKernelModules = [ "virtio_net" "virtio_pci" "virtio_mmio" "virtio_blk" "virtio_scsi" "virtio_balloon" "virtio_console" ];
   # remove default kernel modules: https://github.com/NixOS/nixpkgs/blob/660e7737851506374da39c0fa550c202c824a17c/nixos/modules/system/boot/kernel.nix#L214
   boot.initrd.includeDefaultModules = false;
@@ -48,12 +26,16 @@ in
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMpaY3LyCW4HHqbp4SA4tnA+1Bkgwrtro2s/DEsBcPDe"
   ];
 
-  system.build.kexec = pkgs.runCommand "buildkexec" { } ''
-    mkdir -p $out
-    ln -s ${config.system.build.kernel}/${kernelTarget}         $out/${kernelName}
-    ln -s ${config.system.build.netbootRamdisk}/initrd.zst      $out/${initrdName}
-    ln -s ${kexecScript}                                        $out/${kexecScriptName}
-    ln -s ${pkgs.pkgsStatic.kexec-tools}/bin/kexec              $out/${kexec-musl-bin}
+  system.build.kexec = pkgs.writeScript "kexec-boot" ''
+    #!/usr/bin/env bash
+    cp ${config.system.build.kernel}/bzImage  .
+    cp ${config.system.build.netbootRamdisk}/initrd.zst .
+     
+    echo "--------------------------------------------------"
+    echo "Wait..."
+    echo "After SSH connection lost, ssh root@ip and enjoy NixOS!"
+    kexec --kexec-syscall-auto --load ./bzImage --initrd=./initrd.zst --command-line "init=${config.system.build.toplevel}/init ${toString config.boot.kernelParams}"
+    kexec -e
   '';
 }
 
