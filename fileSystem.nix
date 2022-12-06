@@ -8,7 +8,7 @@
   fileSystems."/nix/.ro-store" = {
     fsType = "squashfs";
     # Be cafeful about the device path: https://github.com/NixOS/nixpkgs/blob/bc85ef815830014d9deabb0803d46a78c832f944/nixos/modules/system/boot/stage-1-init.sh#L520-L540
-    device = "nix-store.squashfs";
+    device = "/nix-store.squashfs";
     options = [ "loop" ];
     neededForBoot = true;
   };

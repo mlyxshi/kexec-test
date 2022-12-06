@@ -10,13 +10,6 @@
           ./kexec.nix
         ];
       };
-
-      "kexec-aarch64" = nixpkgs.lib.nixosSystem {
-        system = "aarch64-linux";
-        modules = [
-          ./kexec.nix
-        ];
-      };
     };
   };
 
