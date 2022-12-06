@@ -55,6 +55,15 @@
     cmd open ''${{ $EDITOR "$f"}}
   '';
 
+  environment.etc."xdg/nvim/sysinit.vim".text = ''
+    lua <<EOF
+    vim.keymap.set("n", "Q", ":qa<CR>")
+    vim.keymap.set("n", "ZQ", ":qa!<CR>")
+    vim.keymap.set("n", "ZZ", ":wa|:qa<CR>")
+    vim.opt.cmdheight = 0
+    EOF
+  '';
+
   environment.shellAliases = {
     r = "lf"; # like ranger 
     v = "nvim";
