@@ -9,8 +9,11 @@
       system = "x86_64-linux";
       modules = [
         ./configuration.nix
+        ./disko.nix
+        ./hardware.nix
         disko.nixosModules.disko
       ];
+      specialArgs = { inherit nixpkgs; };
     };
   };
 
