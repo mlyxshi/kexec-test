@@ -73,10 +73,13 @@
   services.getty.autologinUser = "root";
 
   networking = {
+    hostName = "test";
     useNetworkd = true;
     useDHCP = false;
     firewall.enable = false;
   };
+
+
 
   systemd.network.networks = {
     dhcp = {
