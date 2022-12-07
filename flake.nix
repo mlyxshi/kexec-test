@@ -1,5 +1,8 @@
 {
-  inputs.nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+  # this is a temporary fork including the changes from
+  # https://github.com/NixOS/nixpkgs/pull/169116/files
+  # (rebased on master from time to time)
+  inputs.nixpkgs.url = "github:phaer/nixpkgs/nix-dabei";
 
   outputs = { self, nixpkgs }: {
     nixosConfigurations.test = nixpkgs.lib.nixosSystem {
@@ -8,7 +11,6 @@
          ./nix-dabei.nix
          ./build.nix
       ];
-      specialArgs = { inherit nixpkgs; };
     };
   };
 
