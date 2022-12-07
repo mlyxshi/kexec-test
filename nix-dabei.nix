@@ -49,10 +49,11 @@ let cfg = config.nix-dabei; in
         # hostId is required by NixOS ZFS module, to distinquish systems from each other.
         # installed systems should have a unique one, tied to hardware. For a live system such
         # as this, it seems sufficient to use a static one.
+        hostId = builtins.substring 0 8 (builtins.hashString "sha256" config.networking.hostName);
         # This switches from traditional network interface names like "eth0" to predictable ones
         # like enp3s0. While the latter can be harder to predict, it should be stable, while
         # the former might not be.
-        usePredictableInterfaceNames = false; # for test framework
+        usePredictableInterfaceNames = false;  # for test framework
       };
       # Nix-dabei isn't intended to keep state, but NixOS wants
       # it defined and it does not hurt. You are still able to
@@ -88,7 +89,7 @@ let cfg = config.nix-dabei; in
           # instances, we might need additional ones for kexec to work.
           # E.g. ext4 for hetzner.cloud, presumably to allow our kexec'ed
           # kernel to load its initrd.
-          supportedFilesystems = [ "vfat" "ext4" ];
+          supportedFilesystems = ["vfat" "ext4"];
 
           environment.etc = {
             "hostname".text = "${config.networking.hostName}\n";
@@ -118,11 +119,9 @@ let cfg = config.nix-dabei; in
             network.networks = { };
 
             # This is the upstream expression, just with bashInteractive instead of bash.
-            initrdBin =
-              let
-                systemd = config.boot.initrd.systemd.package;
-              in
-              lib.mkForce ([ pkgs.bashInteractive pkgs.coreutils systemd.kmod systemd ] ++ config.system.fsPackages);
+            initrdBin = let
+              systemd = config.boot.initrd.systemd.package;
+            in lib.mkForce ([pkgs.bashInteractive pkgs.coreutils systemd.kmod systemd] ++ config.system.fsPackages);
 
             storePaths = [
               "${pkgs.ncurses}/share/terminfo/"
@@ -144,8 +143,6 @@ let cfg = config.nix-dabei; in
               # partitioning
               parted = "${pkgs.parted}/bin/parted";
               jq = "${pkgs.jq}/bin/jq";
-
-              gawk = "${pkgs.gawk}/bin/awk";
 
               get-kernel-param = pkgs.writeScript "get-kernel-param" ''
                 for o in $(< /proc/cmdline); do
@@ -176,8 +173,8 @@ let cfg = config.nix-dabei; in
         };
         systemd.services = {
           setup-ssh-authorized-keys = {
-            requires = [ "initrd-fs.target" ];
-            after = [ "initrd-fs.target" ];
+            requires = ["initrd-fs.target"];
+            after = ["initrd-fs.target"];
             requiredBy = [ "sshd.service" ];
             before = [ "sshd.service" ];
             unitConfig.DefaultDependencies = false;
@@ -191,12 +188,12 @@ let cfg = config.nix-dabei; in
                  cat /etc/ssh/authorized_keys.d/root
                  echo "Using ssh authorized key from kernel parameter"
               fi
-            '';
+         '';
           };
 
           generate-ssh-host-key = {
-            requires = [ "initrd-fs.target" ];
-            after = [ "initrd-fs.target" ];
+            requires = ["initrd-fs.target"];
+            after = ["initrd-fs.target"];
             requiredBy = [ "sshd.service" ];
             before = [ "sshd.service" ];
             unitConfig.DefaultDependencies = false;
@@ -215,7 +212,7 @@ let cfg = config.nix-dabei; in
                  ssh-keygen -f /etc/ssh/ssh_host_ed25519_key -t ed25519 -N ""
                  echo "Generated new ssh host key"
               fi
-            '';
+          '';
           };
         };
       };
@@ -227,8 +224,8 @@ let cfg = config.nix-dabei; in
       # but is necessary for nix --store flag as pivot_root does
       # not work on rootfs.
       boot.initrd.systemd.services.remount-root = {
-        requires = [ "systemd-udevd.service" "initrd-root-fs.target" ];
-        after = [ "systemd-udevd.service" ];
+        requires = [ "systemd-udevd.service" "initrd-root-fs.target"];
+        after = [ "systemd-udevd.service"];
         requiredBy = [ "initrd-fs.target" ];
         before = [ "initrd-fs.target" ];
 
@@ -240,7 +237,7 @@ let cfg = config.nix-dabei; in
               cp -R /bin /etc  /init  /lib  /nix  /root  /sbin  /var /sysroot
               systemctl --no-block switch-root /sysroot /bin/init
           fi
-        '';
+      '';
       };
     })
 
