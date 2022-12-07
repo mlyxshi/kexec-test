@@ -1,139 +1,184 @@
-{ config, pkgs, lib, ... }: {
-  time.timeZone = "UTC";
-  i18n.defaultLocale = "en_US.UTF-8";
-  networking = {
-    hostName = "nix-dabei";
-    usePredictableInterfaceNames = false; # for test framework
+{ config, pkgs, lib, ... }:
+let cfg = config.nix-dabei; in
+{
+  options.nix-dabei = with lib; {
+    zfs.enable = mkOption {
+      description = "enable ZFS";
+      type = types.bool;
+      default = true;
+    };
+    ssh.enable = mkOption {
+      description = "enable SSHD";
+      type = types.bool;
+      default = true;
+    };
+    stay-in-stage-1 = mkOption {
+      description = "disable switching to stage-2 so sshd keeps running until reboot";
+      type = types.bool;
+      default = true;
+    };
+    remount-root = mkOption {
+      description = "remount / on tmpfs to allow pivot_root syscalls";
+      type = types.bool;
+      default = true;
+    };
+
+    auto-install.enable = mkOption {
+      description = "enable auto installer, see README";
+      type = types.bool;
+      default = false;
+    };
   };
-  system.stateVersion = lib.trivial.release;
 
-  # toplevel does not build without a root fs but is useful for debugging
-  # and it does not seem to hurt
-  fileSystems."/" = {
-    fsType = "tmpfs";
-    options = [ "mode=0755" ];
-    neededForBoot = true;
-  };
+  config = lib.mkMerge [
+    (lib.mkIf (lib.any (fs: fs == "vfat") config.boot.initrd.supportedFilesystems) {
+      boot.initrd.kernelModules = [ "vfat" "nls_cp437" "nls_iso8859-1" ];
+    })
 
-  boot = {
-    loader.grub.enable = false;
-    kernelPackages = pkgs.linuxPackages_latest;
-    kernelParams = [
-      "systemd.show_status=true"
-      "systemd.log_level=info"
-      "systemd.log_target=console"
-      "systemd.journald.forward_to_console=1"
-    ];
+    (lib.mkIf cfg.zfs.enable {
+      boot.kernelPackages = pkgs.zfs.latestCompatibleLinuxPackages;
+      boot.initrd.supportedFilesystems = [ "zfs" ];
+    })
 
-    initrd = {
-      kernelModules = [ "virtio_pci" "virtio_scsi" "ata_piix" "sd_mod" "sr_mod" "ahci" "nvme" ];
-      network.enable = true;
-      network.ssh = {
-        enable = true;
-        authorizedKeys = [ "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMpaY3LyCW4HHqbp4SA4tnA+1Bkgwrtro2s/DEsBcPDe" ];
-        port = 22;
+    {
+      documentation.enable = false;
+      time.timeZone = "UTC";
+      i18n.defaultLocale = "en_US.UTF-8";
+      networking = {
+        hostName = "nix-dabei";
+        # hostId is required by NixOS ZFS module, to distinquish systems from each other.
+        # installed systems should have a unique one, tied to hardware. For a live system such
+        # as this, it seems sufficient to use a static one.
+        # This switches from traditional network interface names like "eth0" to predictable ones
+        # like enp3s0. While the latter can be harder to predict, it should be stable, while
+        # the former might not be.
+        usePredictableInterfaceNames = false; # for test framework
       };
-      # Besides the file systems used for installation of our nixos
-      # instances, we might need additional ones for kexec to work.
-      # E.g. ext4 for hetzner.cloud, presumably to allow our kexec'ed
-      # kernel to load its initrd.
-      supportedFilesystems = [ "vfat" "ext4" ];
+      # Nix-dabei isn't intended to keep state, but NixOS wants
+      # it defined and it does not hurt. You are still able to
+      # install any realease with the images built.
+      system.stateVersion = "22.11";
 
-      environment.etc = {
-        "hostname".text = "systemd-initrd\n";
-        "resolv.conf".text = "nameserver 1.1.1.1\n";
-        "ssl/certs/ca-certificates.crt".source = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
-        "nix/nix.conf".text = ''
-          build-users-group =
-          extra-experimental-features = nix-command flakes
-          # workaround https://github.com/NixOS/nix/issues/5076
-          sandbox = false
-          substituters = https://cache.nixos.org https://nix-dabei.cachix.org
-          trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= nix-dabei.cachix.org-1:sDW/xH60rYlBGKzHGFiVvSJpedy+n0CXe6ar3qqUuQk=
-        '';
-        "group".text = ''
-          root:x:0:
-          nogroup:x:65534:
-        '';
+      # toplevel does not build without a root fs but is useful for debugging
+      # and it does not seem to hurt
+      fileSystems."/" =
+        {
+          fsType = "tmpfs";
+          options = [ "mode=0755" ];
+          neededForBoot = true;
+        };
+    }
 
-        "lf/lfrc".text = ''
-          set hidden true
-          set number true
-          set drawbox true
-          set dircounts true
-          set incsearch true
-          set period 1
-          map Q   quit
-          map D   delete
-          cmd open ''${{ $EDITOR "$f"}}
-        '';
-
-        "profile".text = ''
-          export EDITOR=nvim
-          alias r='lf'
-        '';
-      };
-
-
-      systemd = {
-        enable = true;
-        emergencyAccess = true;
-
-        network.wait-online.anyInterface = true;
-        # Network is configured with kernelParams
-        network.networks = { };
-
-        # This is the upstream expression, just with bashInteractive instead of bash.
-        initrdBin =
-          let
-            systemd = config.boot.initrd.systemd.package;
-          in
-          lib.mkForce ([ pkgs.bashInteractive pkgs.coreutils systemd.kmod systemd ] ++ config.system.fsPackages);
-
-        storePaths = [
-          "${pkgs.ncurses}/share/terminfo/"
-          "${pkgs.bash}"
+    {
+      boot = {
+        loader.grub.enable = false;
+        kernelParams = [
+          "systemd.show_status=true"
+          "systemd.log_level=info"
+          "systemd.log_target=console"
+          "systemd.journald.forward_to_console=1"
         ];
 
-        extraBin = {
-          # nix & installer
-          nix = "${pkgs.nixStatic}/bin/nix";
-          nix-store = "${pkgs.nixStatic}/bin/nix-store";
-          nix-env = "${pkgs.nixStatic}/bin/nix-env";
-          busybox = "${pkgs.busybox-sandbox-shell}/bin/busybox";
-          nixos-enter = "${pkgs.nixos-install-tools}/bin/nixos-enter";
-          unshare = "${pkgs.util-linux}/bin/unshare";
+        initrd = {
+          kernelModules = [ "virtio_pci" "virtio_scsi" "ata_piix" "sd_mod" "sr_mod" "ahci" "nvme" ];
+          network = {
+            enable = true;
+          };
+          # Besides the file systems used for installation of our nixos
+          # instances, we might need additional ones for kexec to work.
+          # E.g. ext4 for hetzner.cloud, presumably to allow our kexec'ed
+          # kernel to load its initrd.
+          supportedFilesystems = [ "vfat" "ext4" ];
 
-          ssh-keygen = "${config.programs.ssh.package}/bin/ssh-keygen";
-          setsid = "${pkgs.util-linux}/bin/setsid";
+          environment.etc = {
+            "hostname".text = "${config.networking.hostName}\n";
+            "resolv.conf".text = "nameserver 1.1.1.1\n"; # TODO replace with systemd-resolved upstream
+            "ssl/certs/ca-certificates.crt".source = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
+            "nix/nix.conf".text = ''
+              build-users-group =
+              extra-experimental-features = nix-command flakes
+              # workaround https://github.com/NixOS/nix/issues/5076
+              sandbox = false
 
-          # partitioning
-          parted = "${pkgs.parted}/bin/parted";
+              substituters = https://cache.nixos.org https://nix-dabei.cachix.org
+              trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= nix-dabei.cachix.org-1:sDW/xH60rYlBGKzHGFiVvSJpedy+n0CXe6ar3qqUuQk=
+            '';
+            "group".text = ''
+              root:x:0:
+              nogroup:x:65534:
+            '';
+          };
 
-          # file broswer
-          lf = "${pkgs.lf}/bin/lf";
-          htop = "${pkgs.htop}/bin/htop";
+          systemd = {
+            enable = true;
+            emergencyAccess = true;
 
-          get-kernel-param = pkgs.writeScript "get-kernel-param" ''
-            for o in $(< /proc/cmdline); do
-                case $o in
-                    $1=*)
-                        echo "''${o#"$1="}"
-                        ;;
-                esac
-            done
-          '';
+            network.wait-online.anyInterface = true;
+            # Network is configured with kernelParams
+            network.networks = { };
+
+            # This is the upstream expression, just with bashInteractive instead of bash.
+            initrdBin =
+              let
+                systemd = config.boot.initrd.systemd.package;
+              in
+              lib.mkForce ([ pkgs.bashInteractive pkgs.coreutils systemd.kmod systemd ] ++ config.system.fsPackages);
+
+            storePaths = [
+              "${pkgs.ncurses}/share/terminfo/"
+              "${pkgs.bash}"
+            ];
+
+            extraBin = {
+              # nix & installer
+              nix = "${pkgs.nixStatic}/bin/nix";
+              nix-store = "${pkgs.nixStatic}/bin/nix-store";
+              nix-env = "${pkgs.nixStatic}/bin/nix-env";
+              busybox = "${pkgs.busybox-sandbox-shell}/bin/busybox";
+              nixos-enter = "${pkgs.nixos-install-tools}/bin/nixos-enter";
+              unshare = "${pkgs.util-linux}/bin/unshare";
+
+              ssh-keygen = "${config.programs.ssh.package}/bin/ssh-keygen";
+              setsid = "${pkgs.util-linux}/bin/setsid";
+
+              # partitioning
+              parted = "${pkgs.parted}/bin/parted";
+              jq = "${pkgs.jq}/bin/jq";
+
+              gawk = "${pkgs.gawk}/bin/awk";
+
+              get-kernel-param = pkgs.writeScript "get-kernel-param" ''
+                for o in $(< /proc/cmdline); do
+                    case $o in
+                        $1=*)
+                            echo "''${o#"$1="}"
+                            ;;
+                    esac
+                done
+              '';
+            };
+
+            # When these are enabled, they prevent useful output from
+            # going to the console
+            paths.systemd-ask-password-console.enable = false;
+            services.systemd-ask-password-console.enable = false;
+          };
         };
+      };
+    }
 
-        # When these are enabled, they prevent useful output from
-        # going to the console
-        paths.systemd-ask-password-console.enable = false;
-        services = {
-          systemd-ask-password-console.enable = false;
-
+    (lib.mkIf cfg.ssh.enable {
+      boot.initrd = {
+        network.ssh = {
+          enable = true;
+          authorizedKeys = config.users.users.root.openssh.authorizedKeys.keys;
+          port = 22;
+        };
+        systemd.services = {
           setup-ssh-authorized-keys = {
             requires = [ "initrd-fs.target" ];
             after = [ "initrd-fs.target" ];
+            requiredBy = [ "sshd.service" ];
             before = [ "sshd.service" ];
             unitConfig.DefaultDependencies = false;
             serviceConfig.Type = "oneshot";
@@ -147,17 +192,18 @@
                  echo "Using ssh authorized key from kernel parameter"
               fi
             '';
-            requiredBy = [ "sshd.service" ];
           };
 
           generate-ssh-host-key = {
             requires = [ "initrd-fs.target" ];
             after = [ "initrd-fs.target" ];
+            requiredBy = [ "sshd.service" ];
             before = [ "sshd.service" ];
             unitConfig.DefaultDependencies = false;
             serviceConfig.Type = "oneshot";
             script = ''
               mkdir -p /etc/ssh/
+
               param="$(get-kernel-param "ssh_host_key")"
               if [ -n "$param" ]; then
                  umask 177
@@ -170,44 +216,40 @@
                  echo "Generated new ssh host key"
               fi
             '';
-            requiredBy = [ "sshd.service" ];
           };
-
-          # remount-root = {
-          #   # requires = [ "systemd-udevd.service" "initrd-root-fs.target" ];
-          #   after = [ "initrd-root-fs.target" ];
-          #   unitConfig.DefaultDependencies = false;
-          #   serviceConfig.Type = "oneshot";
-          #   script = ''
-          #     # root_fs_type="$(mount|awk '$3 == "/" { print $1 }')"
-          #     # if [ "$root_fs_type" != "tmpfs" ]; then
-          #         cp -R /bin /etc  /init  /lib  /nix  /root  /sbin  /var /sysroot
-          #         systemctl --no-block switch-root /sysroot /bin/init
-          #     # fi
-          #   '';
-
-          #   requiredBy = [ "initrd-fs.target" ];
-          # };
-
-
-          initrd-switch-root.enable = false;
-          initrd-cleanup.enable = false;
-          initrd-parse-etc.enable = false;
-
-
         };
       };
-    };
+    })
 
+    (lib.mkIf cfg.remount-root {
+      # move everything in / to /sysroot and switch-root into
+      # it. This runs a few things twice and wastes some memory
+      # but is necessary for nix --store flag as pivot_root does
+      # not work on rootfs.
+      boot.initrd.systemd.services.remount-root = {
+        requires = [ "systemd-udevd.service" "initrd-root-fs.target" ];
+        after = [ "systemd-udevd.service" ];
+        requiredBy = [ "initrd-fs.target" ];
+        before = [ "initrd-fs.target" ];
 
-    # move everything in / to /sysroot and switch-root into
-    # it. This runs a few things twice and wastes some memory
-    # but is necessary for nix --store flag as pivot_root does
-    # not work on rootfs.
+        unitConfig.DefaultDependencies = false;
+        serviceConfig.Type = "oneshot";
+        script = ''
+          root_fs_type="$(mount|awk '$3 == "/" { print $1 }')"
+          if [ "$root_fs_type" != "tmpfs" ]; then
+              cp -R /bin /etc  /init  /lib  /nix  /root  /sbin  /var /sysroot
+              systemctl --no-block switch-root /sysroot /bin/init
+          fi
+        '';
+      };
+    })
 
-
-    # stay-in-stage-1 
-
-  };
-
+    (lib.mkIf cfg.stay-in-stage-1 {
+      boot.initrd.systemd.services = {
+        initrd-switch-root.enable = false;
+        initrd-cleanup.enable = false;
+        initrd-parse-etc.enable = false;
+      };
+    })
+  ];
 }
