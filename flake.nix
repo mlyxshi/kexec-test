@@ -5,8 +5,8 @@
     nixosConfigurations.test = nixpkgs.lib.nixosSystem {
       system = "x86_64-linux";
       modules = [
-        ./configuration.nix
-        ./hardware.nix
+         ./nix-dabei.nix
+         ./build.nix
       ];
       specialArgs = { inherit nixpkgs; };
     };
